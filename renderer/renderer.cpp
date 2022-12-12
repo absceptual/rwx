@@ -2,59 +2,59 @@
 
 auto Renderer::Renderer(const wchar_t* process, present_t hk_present)
 {
-    IDXGISwapChain* swapchain{ nullptr };
-    ID3D11Device* device{ nullptr };
-    
-    DXGI_SWAP_CHAIN_DESC desc{ };
-    RtlZeroMemory(&desc, 0x0);
+	IDXGISwapChain* swapchain{ nullptr };
+	ID3D11Device* device{ nullptr };
 
-    // Attempt to create a D3D11 device and throw an exception if we fail
-    if (FAILED(D3D11CreateDeviceAndSwapChain(
-        NULL,
-        D3D_DRIVER_TYPE_HARDWARE,
-        NULL,
-        NULL,
-        nullptr,
-        NULL,
-        D3D11_SDK_VERSION,
-        &desc,
-        &swapchain,
-        &device,
-        nullptr,
-        nullptr;
-    )))
-    {
-        m_initalized = false;
-        throw std::runtime_error("Failed to initalize D3D11 device");
-    }
+	DXGI_SWAP_CHAIN_DESC desc{ };
+ 	RtlZeroMemory(&desc, 0x0);
 
-    // Retrieve the virtual table from our swapchain
-    auto vtable  = *reinterpret_cast<void***>(swapchain);
-    auto present = vtable[present_index];
-    if (!present)
-         return;
+	// Attempt to create a D3D11 device and throw an exception if we fail
+        if (FAILED(D3D11CreateDeviceAndSwapChain(
+		NULL,
+		D3D_DRIVER_TYPE_HARDWARE,
+		NULL,
+		NULL,
+		nullptr,
+		NULL,
+		D3D11_SDK_VERSION,
+		&desc,
+		&swapchain,
+		&device,
+		nullptr,
+		nullptr;
+	 )))
+	 {
+		m_initalized = false;
+		throw std::runtime_error("Failed to initalize D3D11 device");
+	 }
 
-    this->o_present = present;
+	 // Retrieve the virtual table from our swapchain
+	auto vtable  = *reinterpret_cast<void***>(swapchain);
+	auto present = vtable[present_index];
+	if (!present)
+	    return;
 
-    // Prepare to install our trampoline hook by allocating memory for our gateway then redirecting control flow
+	this->o_present = present;
+
+    	// Prepare to install our trampoline hook by allocating memory for our gateway then redirecting control flow
 	auto gateway = reinterpret_cast<uintptr_t*>(VirtualAlloc(NULL, NULL, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 	if (!gateway)
-		return;
+	    return;
 
 	// Override original protection (12 bytes hooked, 9 bytes apart of bytecode)
 	DWORD o_protection{ 0x0 };
 	VirtualProtect(target, 21, PAGE_EXECUTE_READWRITE, &o_protection);
 
 
-    // Setup gateway by copying bytes from target function to gateway
-    memcpy(present_gateway, o_present, size);
+    	// Setup gateway by copying bytes from target function to gateway
+    	memcpy(present_gateway, o_present, size);
 
 #ifdef _WIN64
 	const uint8_t bytecode[] = {
 		0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // jmp rax (absolute)
 	};
 #else
-    const uint8_t bytecode[] = {
+    	const uint8_t bytecode[] = {
 		0xE9, 0x00, 0x00, 0x00, 0x00 // jmp rax (relative)
 	};
 #endif
@@ -62,12 +62,13 @@ auto Renderer::Renderer(const wchar_t* process, present_t hk_present)
 	memcpy(reinterpret_cast<void*>((uintptr_t(gateway) + 12)), bytecode, sizeof(bytecode));
 	*reinterpret_cast<uintptr_t*>((uintptr_t(gateway) + 12) + 0x1) = (uintptr_t(target) + size);
 
-    // Overwrite target function (present)
+    	// Overwrite target function (present)
 	memset(o_present, 0x90, size);
 	memcpy(o_present, bytecode, sizeof(bytecode));
 	*reinterpret_cast<uintptr_t*>(uintptr_t(target) + 0x1) = uintptr_t(hk_present);
 
 	VirtualProtect(target, size, o_protection, &o_protection);
+	this->m_initalized = true;
 }
 
 auto Renderer::init(IDXGISwapChain* swapchain) -> bool
