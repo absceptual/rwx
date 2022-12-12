@@ -1,5 +1,17 @@
 #include "renderer.h"
 
+/*
+How do we render internally with Direct3D 11?
+1. Dynamically hook IDXGISwapChain::Present with a VMT hook (varies between architetures) 
+2. Call our begin function within the present hook
+	a. Set our renderer pointers (device, swapchain, context and render target)
+	b. Setup our shaders so we can draw like a chad
+	c. Grab your viewpo
+*/
+
+
+
+// Installs a trampoline hook on IDXGISwapChain::Present
 auto Renderer::Renderer(const wchar_t* process, present_t hk_present)
 {
 	IDXGISwapChain* swapchain{ nullptr };
@@ -71,12 +83,13 @@ auto Renderer::Renderer(const wchar_t* process, present_t hk_present)
 	this->m_initalized = true;
 }
 
+// Grab our device, swapchain, context and render target pointers
 auto Renderer::init(IDXGISwapChain* swapchain) -> bool
 {
-	// No need for re-initalization if our data is already set
-	if (this->m_initalized || !swapchain || swapchain == this->m_swapchain)
+	// Don't do anything if we haven't installed a hook or our swapchain pointer is invalid
+	if (!this->m_initalized || !swapchain)
 		return false;
-
+		
 	// Retrieve current device from swapchain
 	ID3D11Device* device{ nullptr };
 	swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device));
@@ -92,26 +105,23 @@ auto Renderer::init(IDXGISwapChain* swapchain) -> bool
 
 	if (!ctx)
 		return false;
+		
+	ID3D11RenderTargetView* render_target{ nullptr };
+	ctx->OMGetRenderTargets(1, &this->m_rendertarget, nullptr);
 
+	if (this->m_rendertarget) // Create a render target if we dont have one
+		return false;
+		
 	this->m_ctx = ctx;
 	this->m_swapchain = swapchain;
-	this->m_initalized = true;
 	return true;
 }
 
 auto Renderer::begin() -> bool
 {
-	return (this->m_initalized && !get_target() && !setup_shaders() && !get_viewport());
+	return (init() && setup_shaders() && get_viewport() && setup_projection());
 }
 
-auto Renderer::get_target() -> bool
-{
-	if (!this->m_initalized)
-		return false;
-
-	this->m_ctx->OMGetRenderTargets(1, &this->m_renderbuffer, NULL);
-	return true;
-}
 
 auto Renderer::get_viewport() -> bool
 {
@@ -176,7 +186,7 @@ auto Renderer::setup_shaders() -> bool
 	return true;
 }
 
-// Retrieves virtual tables of both ID3D11Device and its swapchain
+/* Retrieves virtual tables of both ID3D11Device and its swapchain
 auto Renderer::dump_virtual_tables() -> bool
 {
 	// Create a temporary device to retrieve its virtual table
@@ -221,6 +231,7 @@ auto Renderer::dump_virtual_tables() -> bool
 
 	return true;
 }
+*/
 
 auto Renderer::get_virtual_tables() -> vtables_t
 {
@@ -239,6 +250,7 @@ auto Renderer::draw_line(D3DXVECTOR2 from, D3DXVECTOR2 to, D3DXCOLOR color, floa
 		{ from.x, from.y, 0.0f, color },
 		{ to.x, to.y, 0.0f, color }
 	};
+	this->m_device->CreateBuffer(&desc, NULL, this->m_buffer0;
 
 	// Map our vertices to the vertex buffer
 	D3D11_MAPPED_SUBRESOURCE ms{ NULL };
@@ -248,6 +260,7 @@ auto Renderer::draw_line(D3DXVECTOR2 from, D3DXVECTOR2 to, D3DXCOLOR color, floa
 
 	UINT stride = sizeof(Renderer::Vertex);
 	UINT offset = 0;
+	
 	this->m_ctx->IASetVertexBuffers(0, 2, &this->m_buffer, &stride, &offset);
 	this->m_ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP); // Drawing a line strip
 	this->m_ctx->Draw(2, 0);
