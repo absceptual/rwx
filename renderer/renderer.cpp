@@ -1,5 +1,75 @@
 #include "renderer.h"
 
+auto Renderer::Renderer(const wchar_t* process, present_t hk_present)
+{
+    IDXGISwapChain* swapchain{ nullptr };
+    ID3D11Device* device{ nullptr };
+    
+    DXGI_SWAP_CHAIN_DESC desc{ };
+    RtlZeroMemory(&desc, 0x0);
+
+    // Attempt to create a D3D11 device and throw an exception if we fail
+    if (FAILED(D3D11CreateDeviceAndSwapChain(
+        NULL,
+        D3D_DRIVER_TYPE_HARDWARE,
+        NULL,
+        NULL,
+        nullptr,
+        NULL,
+        D3D11_SDK_VERSION,
+        &desc,
+        &swapchain,
+        &device,
+        nullptr,
+        nullptr;
+    )))
+    {
+        m_initalized = false;
+        throw std::runtime_error("Failed to initalize D3D11 device");
+    }
+
+    // Retrieve the virtual table from our swapchain
+    auto vtable  = *reinterpret_cast<void***>(swapchain);
+    auto present = vtable[present_index];
+    if (!present)
+         return;
+
+    this->o_present = present;
+
+    // Prepare to install our trampoline hook by allocating memory for our gateway then redirecting control flow
+	auto gateway = reinterpret_cast<uintptr_t*>(VirtualAlloc(NULL, NULL, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+	if (!gateway)
+		return;
+
+	// Override original protection (12 bytes hooked, 9 bytes apart of bytecode)
+	DWORD o_protection{ 0x0 };
+	VirtualProtect(target, 21, PAGE_EXECUTE_READWRITE, &o_protection);
+
+
+    // Setup gateway by copying bytes from target function to gateway
+    memcpy(present_gateway, o_present, size);
+
+#ifdef _WIN64
+	const uint8_t bytecode[] = {
+		0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // jmp rax (absolute)
+	};
+#else
+    const uint8_t bytecode[] = {
+		0xE9, 0x00, 0x00, 0x00, 0x00 // jmp rax (relative)
+	};
+#endif
+
+	memcpy(reinterpret_cast<void*>((uintptr_t(gateway) + 12)), bytecode, sizeof(bytecode));
+	*reinterpret_cast<uintptr_t*>((uintptr_t(gateway) + 12) + 0x1) = (uintptr_t(target) + size);
+
+    // Overwrite target function (present)
+	memset(o_present, 0x90, size);
+	memcpy(o_present, bytecode, sizeof(bytecode));
+	*reinterpret_cast<uintptr_t*>(uintptr_t(target) + 0x1) = uintptr_t(hk_present);
+
+	VirtualProtect(target, size, o_protection, &o_protection);
+}
+
 auto Renderer::init(IDXGISwapChain* swapchain) -> bool
 {
 	// No need for re-initalization if our data is already set
@@ -192,6 +262,5 @@ auto Renderer::draw_box(D3DXVECTOR2 position, D3DXVECTOR2 size, D3DXCOLOR color,
 	this->draw_line({ position.x + size.x, position.y + size.y }, { position.x, position.y + size.y }, color, thickness); // Bottom right to bottom left
 	this->draw_line({ position.x, position.y + size.y }, position, color, thickness); // Bottom left to top left
 }
-
 
 
