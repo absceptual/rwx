@@ -21,7 +21,7 @@ If the function call succeeds, you can call ``Renderer::begin`` and begin render
 ```cpp
 HRESULT __stdcall hooks::hk_present(IDXGISwapChain* _this, UINT interval, UINT flags)
 {
-	if (renderer::init(_this) && renderer::begin())
+	if (renderer::begin(_this))
 	{
 		// Begin drawing
 		D3DXVECTOR2 center{ renderer->get_viewport() };
